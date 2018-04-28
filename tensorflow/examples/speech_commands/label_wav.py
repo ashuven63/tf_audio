@@ -33,9 +33,10 @@ from __future__ import print_function
 
 import argparse
 import sys
-
+import os
 import tensorflow as tf
-
+import time
+import pickle
 # pylint: disable=unused-import
 from tensorflow.contrib.framework.python.ops import audio_ops as contrib_audio
 # pylint: enable=unused-import
@@ -76,7 +77,22 @@ def run_graph(wav_data, labels, input_layer_name, output_layer_name,
 
     return 0
 
-
+def get_caspar_confidence(wav_data, labels, input_layer_name, output_layer_name):
+  """Runs the audio data through the graph and prints predictions."""
+  with tf.Session() as sess:
+    # Feed the audio data as input to the graph.
+    #   predictions  will contain a two-dimensional array, where one
+    #   dimension represents the input image count, and the other has
+    #   predictions per class
+    softmax_tensor = sess.graph.get_tensor_by_name(output_layer_name)
+    predictions, = sess.run(softmax_tensor, {input_layer_name: wav_data})
+    # Sort to show labels in order of confidence
+    top_k = predictions.argsort()[-3:][::-1]
+    for node_id in top_k:
+        if labels[node_id] == 'caspar':
+            score = predictions[node_id]
+            return score
+    return 0
 def label_wav(wav, labels, graph, input_name, output_name, how_many_labels):
   """Loads the model and labels, and runs the inference to print predictions."""
   if not wav or not tf.gfile.Exists(wav):
@@ -95,18 +111,40 @@ def label_wav(wav, labels, graph, input_name, output_name, how_many_labels):
 
   with open(wav, 'rb') as wav_file:
     wav_data = wav_file.read()
-
+  start_time = time.time()
   run_graph(wav_data, labels_list, input_name, output_name, how_many_labels)
+  print('End time {}'.format(time.time() - start_time))
 
+def label_wav_dir(data_dir, labels, graph, input_name, output_name, results_file):
+    labels_list = load_labels(labels)
+    print(labels_list)
+    load_graph(graph)
+    mean_time = []
+    scores = {}
+    for f in os.listdir(data_dir):
+        if not f.endswith('.wav'):
+            continue
+        with open(os.path.join(data_dir, f), 'rb') as wav_file:
+            wav_data = wav_file.read()
+            start_time = time.time()
+            score = get_caspar_confidence(wav_data, labels_list, input_name, output_name)
+            mean_time.append(time.time() - start_time)
+            scores[f] = score
+    eval = {'scores': scores, 'time': mean_time}
+    pickle.dump(eval, open(results_file, 'wb'))
 
 def main(_):
   """Entry point for script, converts flags to arguments."""
-  label_wav(FLAGS.wav, FLAGS.labels, FLAGS.graph, FLAGS.input_name,
-            FLAGS.output_name, FLAGS.how_many_labels)
-
+  #label_wav(FLAGS.wav, FLAGS.labels, FLAGS.graph, FLAGS.input_name,
+  #          FLAGS.output_name, FLAGS.how_many_labels)
+  label_wav_dir(FLAGS.data_dir, FLAGS.labels, FLAGS.graph, FLAGS.input_name, FLAGS.output_name, FLAGS.results_file)
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
+  parser.add_argument(
+      '--data_dir', type=str, default='', help='Audio file directory for testing'
+  )
+  parser.add_argument('--results_file', type=str, help='name of the results file')
   parser.add_argument(
       '--wav', type=str, default='', help='Audio file to be identified.')
   parser.add_argument(
