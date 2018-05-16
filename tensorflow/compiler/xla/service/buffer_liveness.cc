@@ -44,7 +44,7 @@ StatusOr<std::unique_ptr<BufferLiveness>> BufferLiveness::Run(
   return std::move(liveness);
 }
 
-tensorflow::Status BufferLiveness::Analyze() {
+Status BufferLiveness::Analyze() {
   TF_ASSIGN_OR_RETURN(points_to_analysis_, TuplePointsToAnalysis::Run(module_));
   for (auto* computation : module_->computations()) {
     if (computation->IsFusionComputation()) {
@@ -71,7 +71,7 @@ tensorflow::Status BufferLiveness::Analyze() {
   }
 
   XLA_VLOG_LINES(3, ToString());
-  return tensorflow::Status::OK();
+  return Status::OK();
 }
 
 string BufferLiveness::ToString() const {
@@ -102,8 +102,8 @@ bool BufferLiveness::live_range_strictly_before(const LogicalBuffer& a,
     return false;
   }
 
-  // Every user of 'a' must be a predecessor of 'b' or 'b' itself.
   for (const BufferAlias& alias : points_to_analysis_->GetBufferAliases(a)) {
+    // Every user of 'a' must be a predecessor of 'b' or 'b' itself.
     for (auto user : alias.instruction()->users()) {
       if (DoesNotUseOperandBuffer(alias.instruction(), alias.index(), user,
                                   points_to_analysis())) {
@@ -113,6 +113,17 @@ bool BufferLiveness::live_range_strictly_before(const LogicalBuffer& a,
           !hlo_ordering_->ExecutesBefore(user, b.instruction())) {
         return false;
       }
+    }
+
+    // If the root instruction aliases the buffer 'a', the live range of 'a' is
+    // until the end of the computation and can never be strictly before another
+    // buffer defined in the same computation. This is needed to prevent the
+    // root instruction's buffers from being reused by later instructions even
+    // when the root is not the last instruction in the schedule.
+    if (alias.instruction()->parent()->root_instruction() ==
+            alias.instruction() &&
+        alias.instruction()->parent() == b.instruction()->parent()) {
+      return false;
     }
   }
 

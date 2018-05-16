@@ -25,6 +25,7 @@ import numpy as np
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gradient_checker
 from tensorflow.python.ops import gradients_impl
@@ -55,6 +56,7 @@ def _logit(x):
   return np.log(x) - np.log1p(-x)
 
 
+@test_util.with_c_api
 class AssertCloseTest(test.TestCase):
 
   def testAssertCloseIntegerDtype(self):
@@ -145,6 +147,33 @@ class AssertCloseTest(test.TestCase):
           array_ops.identity(w).eval(feed_dict=feed_dict)
 
 
+class MaybeGetStaticTest(test.TestCase):
+
+  def testGetStaticInt(self):
+    x = 2
+    self.assertEqual(x, du.maybe_get_static_value(x))
+    self.assertAllClose(
+        np.array(2.), du.maybe_get_static_value(x, dtype=np.float64))
+
+  def testGetStaticNumpyArray(self):
+    x = np.array(2, dtype=np.int32)
+    self.assertEqual(x, du.maybe_get_static_value(x))
+    self.assertAllClose(
+        np.array(2.), du.maybe_get_static_value(x, dtype=np.float64))
+
+  def testGetStaticConstant(self):
+    x = constant_op.constant(2, dtype=dtypes.int32)
+    self.assertEqual(np.array(2, dtype=np.int32), du.maybe_get_static_value(x))
+    self.assertAllClose(
+        np.array(2.), du.maybe_get_static_value(x, dtype=np.float64))
+
+  def testGetStaticPlaceholder(self):
+    x = array_ops.placeholder(dtype=dtypes.int32, shape=[1])
+    self.assertEqual(None, du.maybe_get_static_value(x))
+    self.assertEqual(None, du.maybe_get_static_value(x, dtype=np.float64))
+
+
+@test_util.with_c_api
 class GetLogitsAndProbsTest(test.TestCase):
 
   def testImproperArguments(self):
@@ -298,6 +327,7 @@ class GetLogitsAndProbsTest(test.TestCase):
         logit.eval(feed_dict={l: np.ones([int(2**11+1)])})
 
 
+@test_util.with_c_api
 class EmbedCheckCategoricalEventShapeTest(test.TestCase):
 
   def testTooSmall(self):
@@ -335,6 +365,7 @@ class EmbedCheckCategoricalEventShapeTest(test.TestCase):
         du.embed_check_categorical_event_shape(param)
 
 
+@test_util.with_c_api
 class EmbedCheckIntegerCastingClosedTest(test.TestCase):
 
   def testCorrectlyAssertsNonnegative(self):
@@ -370,6 +401,7 @@ class EmbedCheckIntegerCastingClosedTest(test.TestCase):
         x_checked.eval(feed_dict={x: np.array([1, -1], dtype=np.int32)})
 
 
+@test_util.with_c_api
 class LogCombinationsTest(test.TestCase):
 
   def testLogCombinationsBinomial(self):
@@ -400,6 +432,7 @@ class LogCombinationsTest(test.TestCase):
       self.assertEqual([2, 2], log_binom.get_shape())
 
 
+@test_util.with_c_api
 class DynamicShapeTest(test.TestCase):
 
   def testSameDynamicShape(self):
@@ -504,6 +537,7 @@ class DynamicShapeTest(test.TestCase):
               }))
 
 
+@test_util.with_c_api
 class RotateTransposeTest(test.TestCase):
 
   def _np_rotate_transpose(self, x, shift):
@@ -537,6 +571,7 @@ class RotateTransposeTest(test.TestCase):
                                   shift: shift_value}))
 
 
+@test_util.with_c_api
 class PickVectorTest(test.TestCase):
 
   def testCorrectlyPicksVector(self):
@@ -557,6 +592,7 @@ class PickVectorTest(test.TestCase):
                               constant_op.constant(False), x, y))  # No eval.
 
 
+@test_util.with_c_api
 class PreferStaticRankTest(test.TestCase):
 
   def testNonEmptyConstantTensor(self):
@@ -596,6 +632,7 @@ class PreferStaticRankTest(test.TestCase):
       self.assertAllEqual(0, rank.eval(feed_dict={x: 1}))
 
 
+@test_util.with_c_api
 class PreferStaticShapeTest(test.TestCase):
 
   def testNonEmptyConstantTensor(self):
@@ -635,6 +672,7 @@ class PreferStaticShapeTest(test.TestCase):
       self.assertAllEqual(np.array([]), shape.eval(feed_dict={x: 1}))
 
 
+@test_util.with_c_api
 class PreferStaticValueTest(test.TestCase):
 
   def testNonEmptyConstantTensor(self):
@@ -675,6 +713,7 @@ class PreferStaticValueTest(test.TestCase):
       self.assertAllEqual(np.array(1), value.eval(feed_dict={x: 1}))
 
 
+@test_util.with_c_api
 class FillTriangularTest(test.TestCase):
 
   def setUp(self):
@@ -690,7 +729,7 @@ class FillTriangularTest(test.TestCase):
       raise ValueError("Invalid shape.")
     n = np.int32(n)
     # We can't do: `x[..., -(n**2-m):]` because this doesn't correctly handle
-    # `m == n == 1`. Hence, we do absoulte indexing.
+    # `m == n == 1`. Hence, we do absolute indexing.
     x_tail = x[..., (m - (n * n - m)):]
     y = np.concatenate(
         [x, x_tail[..., ::-1]] if upper else [x_tail, x[..., ::-1]],
@@ -769,6 +808,7 @@ class FillTriangularTest(test.TestCase):
     self._run_test(self._rng.randn(2, 3, int(7*8/2)), upper=True)
 
 
+@test_util.with_c_api
 class ReduceWeightedLogSumExp(test.TestCase):
 
   def _reduce_weighted_logsumexp(self, logx, w, axis, keep_dims=False):
@@ -865,6 +905,7 @@ class ReduceWeightedLogSumExp(test.TestCase):
           du.reduce_weighted_logsumexp(x, w, axis=[0, 1]).eval())
 
 
+@test_util.with_c_api
 class GenNewSeedTest(test.TestCase):
 
   def testOnlyNoneReturnsNone(self):
@@ -875,6 +916,7 @@ class GenNewSeedTest(test.TestCase):
 # TODO(jvdillon): Merge this test back into:
 # tensorflow/python/kernel_tests/softplus_op_test.py
 # once TF core is accepting new ops.
+@test_util.with_c_api
 class SoftplusTest(test.TestCase):
 
   def _npSoftplus(self, np_features):
@@ -974,6 +1016,62 @@ class SoftplusTest(test.TestCase):
       # Equivalent to `assertAllTrue` (if it existed).
       self.assertAllEqual(
           np.ones_like(grads).astype(np.bool), np.isfinite(grads))
+
+class ArgumentsTest(test.TestCase):
+
+  def testNoArguments(self):
+    def foo():
+      return du.parent_frame_arguments()
+
+    self.assertEqual({}, foo())
+
+  def testPositionalArguments(self):
+    def foo(a, b, c, d):  # pylint: disable=unused-argument
+      return du.parent_frame_arguments()
+
+    self.assertEqual({"a": 1, "b": 2, "c": 3, "d": 4}, foo(1, 2, 3, 4))
+
+    # Tests that it does not matter where this function is called, and
+    # no other local variables are returned back.
+    def bar(a, b, c):
+      unused_x = a * b
+      unused_y = c * 3
+      return du.parent_frame_arguments()
+
+    self.assertEqual({"a": 1, "b": 2, "c": 3}, bar(1, 2, 3))
+
+  def testOverloadedArgumentValues(self):
+    def foo(a, b, c):  # pylint: disable=unused-argument
+      a = 42
+      b = 31
+      c = 42
+      return du.parent_frame_arguments()
+    self.assertEqual({"a": 42, "b": 31, "c": 42}, foo(1, 2, 3))
+
+  def testKeywordArguments(self):
+    def foo(**kwargs):  # pylint: disable=unused-argument
+      return du.parent_frame_arguments()
+
+    self.assertEqual({"a": 1, "b": 2, "c": 3, "d": 4}, foo(a=1, b=2, c=3, d=4))
+
+  def testPositionalKeywordArgs(self):
+    def foo(a, b, c, **kwargs):  # pylint: disable=unused-argument
+      return du.parent_frame_arguments()
+
+    self.assertEqual({"a": 1, "b": 2, "c": 3}, foo(a=1, b=2, c=3))
+    self.assertEqual({"a": 1, "b": 2, "c": 3, "unicorn": None},
+                     foo(a=1, b=2, c=3, unicorn=None))
+
+  def testNoVarargs(self):
+    def foo(a, b, c, *varargs, **kwargs):  # pylint: disable=unused-argument
+      return du.parent_frame_arguments()
+
+    self.assertEqual({"a": 1, "b": 2, "c": 3}, foo(a=1, b=2, c=3))
+    self.assertEqual({"a": 1, "b": 2, "c": 3}, foo(1, 2, 3, *[1, 2, 3]))
+    self.assertEqual({"a": 1, "b": 2, "c": 3, "unicorn": None},
+                     foo(1, 2, 3, unicorn=None))
+    self.assertEqual({"a": 1, "b": 2, "c": 3, "unicorn": None},
+                     foo(1, 2, 3, *[1, 2, 3], unicorn=None))
 
 
 if __name__ == "__main__":

@@ -22,23 +22,48 @@ import os
 import re
 import sys
 
-from setuptools import find_packages, setup, Command
+from setuptools import Command
+from setuptools import find_packages
+from setuptools import setup
 from setuptools.command.install import install as InstallCommandBase
 from setuptools.dist import Distribution
 
 # This version string is semver compatible, but incompatible with pip.
 # For pip, we will remove all '-' characters from this string, and use the
 # result for pip.
-_VERSION = '1.4.0'
+_VERSION = '1.8.0'
+
+_SHORT_DESCRIPTION = ('TensorFlow is an open source machine learning framework '
+                      'for everyone.')
+
+_LONG_DESCRIPTION = ('TensorFlow is an open source software library for high '
+                     'performance numerical computation. Its flexible '
+                     'architecture allows easy deployment of computation across'
+                     ' a variety of platforms (CPUs, GPUs, TPUs), and from '
+                     'desktops to clusters of servers to mobile and edge '
+                     'devices. Originally developed by researchers and '
+                     'engineers from the Google Brain team within Google\'s AI '
+                     'organization, it comes with strong support for machine '
+                     'learning and deep learning and the flexible numerical '
+                     'computation core is used across many other scientific '
+                     'domains.')
 
 REQUIRED_PACKAGES = [
     'absl-py >= 0.1.6',
+    'astor >= 0.6.0',
     'gast >= 0.2.0',
-    'numpy >= 1.12.1',
+    'numpy >= 1.13.3',
     'six >= 1.10.0',
     'protobuf >= 3.4.0',
-    'tensorflow-tensorboard',
+    'tensorboard >= 1.8.0, < 1.9.0',
+    'termcolor >= 1.1.0',
 ]
+
+if sys.byteorder == 'little':
+  # grpcio does not build correctly on big-endian machines due to lack of
+  # BoringSSL support.
+  # See https://github.com/tensorflow/tensorflow/issues/17882.
+  REQUIRED_PACKAGES.append('grpcio >= 1.8.6')
 
 project_name = 'tensorflow'
 if '--project_name' in sys.argv:
@@ -59,7 +84,7 @@ else:
 if 'tf_nightly' in project_name:
   for i, pkg in enumerate(REQUIRED_PACKAGES):
     if 'tensorboard' in pkg:
-      REQUIRED_PACKAGES[i] = 'tb-nightly >= 1.5.0a0, < 1.6.0a0'
+      REQUIRED_PACKAGES[i] = 'tb-nightly >= 1.9.0a0, < 1.10.0a0'
       break
 
 # weakref.finalize and enum were introduced in Python 3.4
@@ -69,7 +94,7 @@ if sys.version_info < (3, 4):
 
 # pylint: disable=line-too-long
 CONSOLE_SCRIPTS = [
-    'freeze_graph = tensorflow.python.tools.freeze_graph:main',
+    'freeze_graph = tensorflow.python.tools.freeze_graph:run_main',
     'toco_from_protos = tensorflow.contrib.lite.toco.python.toco_from_protos:main',
     'toco = tensorflow.contrib.lite.toco.python.toco_wrapper:main',
     'saved_model_cli = tensorflow.python.tools.saved_model_cli:main',
@@ -89,7 +114,9 @@ TEST_PACKAGES = [
     'scipy >= 0.15.1',
 ]
 
+
 class BinaryDistribution(Distribution):
+
   def has_ext_modules(self):
     return True
 
@@ -171,16 +198,17 @@ class InstallHeaders(Command):
 
 def find_files(pattern, root):
   """Return all the files matching pattern below root dir."""
-  for path, _, files in os.walk(root):
+  for dirpath, _, files in os.walk(root):
     for filename in fnmatch.filter(files, pattern):
-      yield os.path.join(path, filename)
+      yield os.path.join(dirpath, filename)
 
 
 matches = ['../' + x for x in find_files('*', 'external') if '.py' not in x]
 
-so_lib_paths = [i for i in os.listdir('.')
-                if os.path.isdir(i) 
-                and fnmatch.fnmatch(i, '_solib_*')]
+so_lib_paths = [
+    i for i in os.listdir('.')
+    if os.path.isdir(i) and fnmatch.fnmatch(i, '_solib_*')
+]
 
 for path in so_lib_paths:
   matches.extend(
@@ -196,14 +224,13 @@ headers = (list(find_files('*.h', 'tensorflow/core')) +
            list(find_files('*.h', 'tensorflow/stream_executor')) +
            list(find_files('*.h', 'google/protobuf_archive/src')) +
            list(find_files('*', 'third_party/eigen3')) +
-           list(find_files('*', 'external/eigen_archive')) +
-           list(find_files('*.h', 'external/nsync/public')))
+           list(find_files('*', 'external/eigen_archive')))
 
 setup(
     name=project_name,
     version=_VERSION.replace('-', ''),
-    description='TensorFlow helps the tensors flow',
-    long_description='',
+    description=_SHORT_DESCRIPTION,
+    long_description=_LONG_DESCRIPTION,
     url='https://www.tensorflow.org/',
     author='Google Inc.',
     author_email='opensource@google.com',
@@ -249,4 +276,5 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
     license='Apache 2.0',
-    keywords='tensorflow tensor machine learning',)
+    keywords='tensorflow tensor machine learning',
+)

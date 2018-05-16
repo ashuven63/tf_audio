@@ -64,6 +64,7 @@ class ConvLSTMTest(test.TestCase):
           self.assertEqual(len(states), 2)
           model = keras.models.Model(x, states[0])
           state = model.predict(inputs)
+
           self.assertAllClose(
               keras.backend.eval(layer.states[0]), state, atol=1e-4)
 
@@ -178,6 +179,23 @@ class ConvLSTMTest(test.TestCase):
                   'dropout': 0.1,
                   'recurrent_dropout': 0.1},
           input_shape=(1, 2, 5, 5, 2))
+
+  def test_conv_lstm_cloning(self):
+    with self.test_session():
+      model = keras.models.Sequential()
+      model.add(keras.layers.ConvLSTM2D(5, 3, input_shape=(None, 5, 5, 3)))
+
+      test_inputs = np.random.random((2, 4, 5, 5, 3))
+      reference_outputs = model.predict(test_inputs)
+      weights = model.get_weights()
+
+    # Use a new graph to clone the model
+    with self.test_session():
+      clone = keras.models.clone_model(model)
+      clone.set_weights(weights)
+
+      outputs = clone.predict(test_inputs)
+      self.assertAllClose(reference_outputs, outputs, atol=1e-5)
 
 
 if __name__ == '__main__':

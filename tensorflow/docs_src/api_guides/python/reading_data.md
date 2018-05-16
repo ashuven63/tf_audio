@@ -51,8 +51,7 @@ it is executed without a feed, so you won't forget to feed it.
 
 An example using `placeholder` and feeding to train on MNIST data can be found
 in
-[`tensorflow/examples/tutorials/mnist/fully_connected_feed.py`](https://www.tensorflow.org/code/tensorflow/examples/tutorials/mnist/fully_connected_feed.py),
-and is described in the @{$mechanics$MNIST tutorial}.
+[`tensorflow/examples/tutorials/mnist/fully_connected_feed.py`](https://www.tensorflow.org/code/tensorflow/examples/tutorials/mnist/fully_connected_feed.py).
 
 ## `QueueRunner`
 
@@ -185,7 +184,7 @@ The recommended way to read a TFRecord file is with a @{tf.data.TFRecordDataset}
     dataset = dataset.map(decode)
 ```
 
-To acomplish the same task with a queue based input pipeline requires the following code 
+To accomplish the same task with a queue based input pipeline requires the following code
 (using the same `decode` function from the above example): 
 
 ``` python

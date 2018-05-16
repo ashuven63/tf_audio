@@ -20,9 +20,9 @@ limitations under the License.
 
 #include <string>
 
+#include "tensorflow/compiler/xla/status.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
-#include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/platform/types.h"
@@ -35,6 +35,10 @@ class LayoutUtil {
   // Creates a layout with the given minor-to-major dimension order. (This is a
   // convenience function for protobuf construction.)
   static Layout MakeLayout(tensorflow::gtl::ArraySlice<int64> minor_to_major);
+
+  // Creates a sparse layout with the given maximum number of elements. (This is
+  // a convenience function for protobuf construction.)
+  static Layout MakeSparseLayout(int64 max_sparse_elements);
 
   // Returns default layout for the given shape.
   static Layout GetDefaultLayoutForShape(const Shape& shape);
@@ -57,12 +61,12 @@ class LayoutUtil {
   static void SetToDefaultLayout(ProgramShape* program_shape);
 
   // Validates that the layout within the given shape is correct.
-  static tensorflow::Status ValidateLayoutInShape(const Shape& shape);
+  static Status ValidateLayoutInShape(const Shape& shape);
 
   // Validates that the provided layout satisfies invariants for the given
   // shape.
-  static tensorflow::Status ValidateLayoutForShape(const Layout& layout,
-                                                   const Shape& shape);
+  static Status ValidateLayoutForShape(const Layout& layout,
+                                       const Shape& shape);
 
   // Clears the layout in the given Shape. After this function is called,
   // HasLayout will return false for the shape.
@@ -72,7 +76,7 @@ class LayoutUtil {
   static void ClearLayout(ProgramShape* program_shape);
 
   // Returns whether the given Shape is an array and has a dense format layout.
-  static bool IsDense(const Shape& shape);
+  static bool IsDenseArray(const Shape& shape);
 
   // Returns whether the given Layout has a dense format.
   static bool IsDense(const Layout& layout);
@@ -107,6 +111,17 @@ class LayoutUtil {
   // an array and has a dense layout.
   static PaddingValue GetPaddingValue(const Shape& shape);
 
+  // Returns whether the given Shape is an array (i.e. not a tuple) and has a
+  // sparse format layout.
+  static bool IsSparseArray(const Shape& shape);
+
+  // Returns whether the given Layout has a sparse format.
+  static bool IsSparse(const Layout& layout);
+
+  // Returns the maximum number of elements that can be stored in a sparse
+  // layout.
+  static int64 MaxSparseElements(const Layout& layout);
+
   // Returns whether the given shape has a layout. For tuple shapes, true is
   // returned only if all elements have layouts.
   static bool HasLayout(const Shape& shape);
@@ -122,7 +137,7 @@ class LayoutUtil {
   static tensorflow::gtl::ArraySlice<int64> MinorToMajor(const Shape& shape);
   static tensorflow::gtl::ArraySlice<int64> MinorToMajor(const Layout& layout);
 
-  // Major(0) is the most major logical dimension number, major(1) is the
+  // Major(0) is the most major logical dimension number, Major(1) is the
   // second-most-major logical dimension number and so on.
   //
   // This can be used to translate physical dimension numbers to logical
@@ -164,8 +179,7 @@ class LayoutUtil {
   // tuples.  'src' and 'dst' need not be compatible but the two shapes must
   // have the same tuple structure (if any) and arrays must have the same
   // rank. within the shapes must have the same number of dimensions.
-  static tensorflow::Status CopyLayoutBetweenShapes(const Shape& src,
-                                                    Shape* dst);
+  static Status CopyLayoutBetweenShapes(const Shape& src, Shape* dst);
 
   // Returns true if the layouts of lhs and rhs are equal, false
   // otherwise. Recursively compares layouts of tuples.
@@ -180,9 +194,14 @@ class LayoutUtil {
   static bool AreDimensionsConsecutive(const Layout& layout,
                                        tensorflow::gtl::ArraySlice<int64> dims);
 
+  // Compute a hash for `layout`.
+  static size_t Hash(const Layout& layout);
+
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(LayoutUtil);
 };
+
+std::ostream& operator<<(std::ostream& out, const Layout& layout);
 
 }  // namespace xla
 

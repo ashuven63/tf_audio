@@ -161,7 +161,14 @@ void XlaOpRegistry::RegisterCompilationKernels() {
     const string& op_name = op.first;
     const std::unique_ptr<OpRegistration>& op_registration = op.second;
     const OpDef* op_def;
-    TF_CHECK_OK(op_registry->LookUpOpDef(op_name, &op_def));
+    Status lookup_status = op_registry->LookUpOpDef(op_name, &op_def);
+    if (!lookup_status.ok()) {
+      LOG(ERROR) << lookup_status.error_message();
+      XLA_LOG_LINES(
+          ERROR, "Ops registered: \n" +
+                     dynamic_cast<OpRegistry*>(op_registry)->DebugString(true));
+    }
+    TF_CHECK_OK(lookup_status);
 
     std::unordered_set<string> type_attrs;
     for (const OpDef::AttrDef& attr_def : op_def->attr()) {
@@ -248,6 +255,8 @@ void XlaOpRegistry::RegisterCompilationKernels() {
 std::vector<const KernelDef*> XlaOpRegistry::DeviceKernels(
     const string& compilation_device_name,
     bool include_compilation_only_kernels) {
+  // Ensure compilation kernels registered.
+  RegisterCompilationKernels();
   std::vector<const KernelDef*> kernels;
   XlaOpRegistry& registry = Instance();
   mutex_lock lock(registry.mutex_);
@@ -302,7 +311,7 @@ XlaOpRegistry& XlaOpRegistry::Instance() {
 
 XlaOpRegistrationBuilder::XlaOpRegistrationBuilder(StringPiece name) {
   registration_.reset(new XlaOpRegistry::OpRegistration);
-  registration_->name = name.ToString();
+  registration_->name = std::string(name);
 }
 
 XlaOpRegistrationBuilder XlaOpRegistrationBuilder::Name(StringPiece name) {
@@ -314,14 +323,14 @@ XlaOpRegistrationBuilder& XlaOpRegistrationBuilder::Device(
     gtl::ArraySlice<StringPiece> devices) {
   registration_->has_device_whitelist = true;
   for (StringPiece device : devices) {
-    registration_->device_whitelist.insert(device.ToString());
+    registration_->device_whitelist.insert(std::string(device));
   }
   return *this;
 }
 
 XlaOpRegistrationBuilder& XlaOpRegistrationBuilder::Device(StringPiece device) {
   registration_->has_device_whitelist = true;
-  registration_->device_whitelist.insert(device.ToString());
+  registration_->device_whitelist.insert(std::string(device));
   return *this;
 }
 
@@ -338,7 +347,7 @@ XlaOpRegistrationBuilder& XlaOpRegistrationBuilder::AllowResourceTypes() {
 XlaOpRegistrationBuilder& XlaOpRegistrationBuilder::TypeConstraint(
     StringPiece attr_name, DataType allowed) {
   std::set<DataType>& types =
-      registration_->type_constraints[attr_name.ToString()];
+      registration_->type_constraints[std::string(attr_name)];
   types.insert(allowed);
   return *this;
 }
@@ -346,7 +355,7 @@ XlaOpRegistrationBuilder& XlaOpRegistrationBuilder::TypeConstraint(
 XlaOpRegistrationBuilder& XlaOpRegistrationBuilder::TypeConstraint(
     StringPiece attr_name, gtl::ArraySlice<DataType> allowed) {
   std::set<DataType>& types =
-      registration_->type_constraints[attr_name.ToString()];
+      registration_->type_constraints[std::string(attr_name)];
   for (DataType t : allowed) {
     types.insert(t);
   }
@@ -355,7 +364,7 @@ XlaOpRegistrationBuilder& XlaOpRegistrationBuilder::TypeConstraint(
 
 XlaOpRegistrationBuilder& XlaOpRegistrationBuilder::CompileTimeConstInput(
     StringPiece input_name) {
-  registration_->compile_time_constant_inputs.insert(input_name.ToString());
+  registration_->compile_time_constant_inputs.insert(std::string(input_name));
   return *this;
 }
 
@@ -385,7 +394,7 @@ XlaBackendRegistrar::XlaBackendRegistrar(
     StringPiece name, gtl::ArraySlice<DataType> types,
     XlaOpRegistry::BackendOpFilter op_filter) {
   XlaOpRegistry& registry = XlaOpRegistry::Instance();
-  registry.RegisterBackend(name.ToString(), types, op_filter);
+  registry.RegisterBackend(std::string(name), types, op_filter);
 }
 
 }  // namespace tensorflow

@@ -34,10 +34,10 @@
 
 namespace tensorflow {
 
+using boosted_trees::learner::LearnerConfig_MultiClassStrategy;
 using boosted_trees::learner::SplitInfo;
 using boosted_trees::learner::stochastic::GradientStats;
 using boosted_trees::learner::stochastic::NodeStats;
-using boosted_trees::learner::LearnerConfig_MultiClassStrategy;
 
 namespace {
 const int32 DUMMY_FEATURE_DIMENSION = -1;
@@ -47,9 +47,8 @@ class BaseBuildSplitOp : public OpKernel {
  public:
   explicit BaseBuildSplitOp(OpKernelConstruction* const context)
       : OpKernel(context) {
-    OP_REQUIRES_OK(
-        context,
-        context->GetAttr("feature_column_group_id", &feature_column_group_id_));
+    OP_REQUIRES_OK(context, context->GetAttr("feature_column_group_id",
+                                             &feature_column_group_id_));
     OP_REQUIRES_OK(context,
                    context->GetAttr("l1_regularization", &l1_regularization_));
     OP_REQUIRES_OK(context,
@@ -423,6 +422,10 @@ class BuildSparseInequalitySplitsOp : public BaseBuildSplitOp {
               GradientStats(*gradients_t, *hessians_t, bucket_idx);
         }
         present_gradient_stats *= normalizer_ratio;
+        GradientStats not_present =
+            root_gradient_stats - present_gradient_stats;
+        // If there was (almost) no sparsity, fix the default direction to LEFT.
+        bool fixed_default_direction = not_present.IsAlmostZero();
 
         GradientStats left_gradient_stats;
         for (int64 element_idx = start_index; element_idx < end_index;
@@ -442,6 +445,7 @@ class BuildSparseInequalitySplitsOp : public BaseBuildSplitOp {
           // backward pass gradients.
           GradientStats right_gradient_stats =
               present_gradient_stats - left_gradient_stats;
+
           {
             NodeStats left_stats_default_left =
                 ComputeNodeStats(root_gradient_stats - right_gradient_stats);
@@ -458,7 +462,9 @@ class BuildSparseInequalitySplitsOp : public BaseBuildSplitOp {
               best_dimension_idx = dimension_id;
             }
           }
-          {
+          // Consider calculating the default direction only when there were
+          // enough missing examples.
+          if (!fixed_default_direction) {
             NodeStats left_stats_default_right =
                 ComputeNodeStats(left_gradient_stats);
             NodeStats right_stats_default_right =

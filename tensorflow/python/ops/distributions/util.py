@@ -33,6 +33,7 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.util import tf_inspect
 
 
 def assert_close(
@@ -58,8 +59,7 @@ def assert_close(
   if data is None:
     data = [
         message,
-        "Condition x ~= y did not hold element-wise: x = ", x.name, x, "y = ",
-        y.name, y
+        "Condition x ~= y did not hold element-wise: x = ", x, "y = ", y
     ]
 
   if x.dtype.is_integer:
@@ -95,7 +95,7 @@ def assert_integer_form(
     x = ops.convert_to_tensor(x, name="x")
     if x.dtype.is_integer:
       return control_flow_ops.no_op()
-    message = message or "{} has non-integer components".format(x.op.name)
+    message = message or "{} has non-integer components".format(x)
     if int_dtype is None:
       try:
         int_dtype = {
@@ -123,13 +123,13 @@ def embed_check_nonnegative_integer_form(
     x = ops.convert_to_tensor(x, name="x")
     assertions = [
         check_ops.assert_non_negative(
-            x, message="'{}' must be non-negative.".format(x.op.name)),
+            x, message="'{}' must be non-negative.".format(x)),
     ]
     if not x.dtype.is_integer:
       assertions += [
           assert_integer_form(
               x, message="'{}' cannot contain fractional components.".format(
-                  x.op.name)),
+                  x)),
       ]
     return control_flow_ops.with_dependencies(assertions, x)
 
@@ -161,6 +161,30 @@ def same_dynamic_shape(a, b):
       math_ops.equal(array_ops.rank(a), array_ops.rank(b)),
       all_shapes_equal,
       lambda: constant_op.constant(False))
+
+
+def maybe_get_static_value(x, dtype=None):
+  """Helper which tries to return a static value.
+
+  Given `x`, extract it's value statically, optionally casting to a specific
+  dtype. If this is not possible, None is returned.
+
+  Args:
+    x: `Tensor` for which to extract a value statically.
+    dtype: Optional dtype to cast to.
+
+  Returns:
+    Statically inferred value if possible, otherwise None.
+  """
+  if x is None:
+    return x
+  try:
+    x_ = tensor_util.constant_value(x)
+  except TypeError:
+    x_ = x
+  if x_ is None or dtype is None:
+    return x_
+  return np.array(x_, dtype)
 
 
 def get_logits_and_probs(logits=None,
@@ -434,7 +458,7 @@ def embed_check_integer_casting_closed(
         and not _is_integer_like_by_dtype(target_dtype)):
       raise TypeError("At least one of {}.dtype ({}) and target_dtype ({}) "
                       "must be integer-type.".format(
-                          x.op.name, x.dtype.name, target_dtype.name))
+                          x, x.dtype.name, target_dtype.name))
 
     assertions = []
     if assert_nonnegative:
@@ -683,7 +707,7 @@ def pick_vector(cond,
     cond = ops.convert_to_tensor(cond, name="cond")
     if cond.dtype != dtypes.bool:
       raise TypeError("%s.dtype=%s which is not %s" %
-                      (cond.name, cond.dtype, dtypes.bool))
+                      (cond, cond.dtype, dtypes.bool))
     cond_value_static = tensor_util.constant_value(cond)
     if cond_value_static is not None:
       return true_vector if cond_value_static else false_vector
@@ -692,8 +716,8 @@ def pick_vector(cond,
     if true_vector.dtype != false_vector.dtype:
       raise TypeError(
           "%s.dtype=%s does not match %s.dtype=%s"
-          % (true_vector.name, true_vector.dtype,
-             false_vector.name, false_vector.dtype))
+          % (true_vector, true_vector.dtype,
+             false_vector, false_vector.dtype))
     n = array_ops.shape(true_vector)[0]
     return array_ops.slice(
         array_ops.concat([true_vector, false_vector], 0),
@@ -1041,14 +1065,14 @@ def reduce_weighted_logsumexp(
   with ops.name_scope(name, "reduce_weighted_logsumexp", [logx, w]):
     logx = ops.convert_to_tensor(logx, name="logx")
     if w is None:
-      lswe = math_ops.reduce_logsumexp(logx, axis=axis, keep_dims=keep_dims)
+      lswe = math_ops.reduce_logsumexp(logx, axis=axis, keepdims=keep_dims)
       if return_sign:
         sgn = array_ops.ones_like(lswe)
         return lswe, sgn
       return lswe
     w = ops.convert_to_tensor(w, dtype=logx.dtype, name="w")
     log_absw_x = logx + math_ops.log(math_ops.abs(w))
-    max_log_absw_x = math_ops.reduce_max(log_absw_x, axis=axis, keep_dims=True)
+    max_log_absw_x = math_ops.reduce_max(log_absw_x, axis=axis, keepdims=True)
     # If the largest element is `-inf` or `inf` then we don't bother subtracting
     # off the max. We do this because otherwise we'd get `inf - inf = NaN`. That
     # this is ok follows from the fact that we're actually free to subtract any
@@ -1060,9 +1084,7 @@ def reduce_weighted_logsumexp(
     wx_over_max_absw_x = (
         math_ops.sign(w) * math_ops.exp(log_absw_x - max_log_absw_x))
     sum_wx_over_max_absw_x = math_ops.reduce_sum(
-        wx_over_max_absw_x,
-        axis=axis,
-        keep_dims=keep_dims)
+        wx_over_max_absw_x, axis=axis, keepdims=keep_dims)
     if not keep_dims:
       max_log_absw_x = array_ops.squeeze(max_log_absw_x, axis)
     sgn = math_ops.sign(sum_wx_over_max_absw_x)
@@ -1180,8 +1202,7 @@ def process_quadrature_grid_and_probs(
     grid = ops.convert_to_tensor(grid, name="grid", dtype=dtype)
     probs = ops.convert_to_tensor(probs, name="unnormalized_probs",
                                   dtype=dtype)
-    probs /= linalg_ops.norm(probs, ord=1, axis=-1, keep_dims=True,
-                             name="probs")
+    probs /= linalg_ops.norm(probs, ord=1, axis=-1, keepdims=True, name="probs")
 
     def _static_event_size(x):
       """Returns the static size of a specific dimension or `None`."""
@@ -1275,6 +1296,43 @@ def pad(x, axis, front=False, back=False, value=0, count=1, name=None):
     if final_shape is not None:
       x.set_shape(final_shape)
     return x
+
+
+def parent_frame_arguments():
+  """Returns parent frame arguments.
+
+  When called inside a function, returns a dictionary with the caller's function
+  arguments. These are positional arguments and keyword arguments (**kwargs),
+  while variable arguments (*varargs) are excluded.
+
+  When called at global scope, this will return an empty dictionary, since there
+  are no arguments.
+
+  WARNING: If caller function argument names are overloaded before invoking
+  this method, then values will reflect the overloaded value. For this reason,
+  we recommend calling `parent_frame_arguments` at the beginning of the
+  function.
+  """
+  # All arguments and the names used for *varargs, and **kwargs
+  arg_names, variable_arg_name, keyword_arg_name, local_vars = (
+      tf_inspect._inspect.getargvalues(  # pylint: disable=protected-access
+          # Get the first frame of the caller of this method.
+          tf_inspect._inspect.stack()[1][0]))  # pylint: disable=protected-access
+
+  # Remove the *varargs, and flatten the **kwargs. Both are
+  # nested lists.
+  local_vars.pop(variable_arg_name, {})
+  keyword_args = local_vars.pop(keyword_arg_name, {})
+
+  final_args = {}
+  # Copy over arguments and their values. In general, local_vars
+  # may contain more than just the arguments, since this method
+  # can be called anywhere in a function.
+  for arg_name in arg_names:
+    final_args[arg_name] = local_vars.pop(arg_name)
+  final_args.update(keyword_args)
+
+  return final_args
 
 
 class AppendDocstring(object):

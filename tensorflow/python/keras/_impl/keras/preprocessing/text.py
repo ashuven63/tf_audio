@@ -13,8 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 """Utilities for text input preprocessing.
-
-May benefit from a fast Cython rewrite.
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -29,23 +27,30 @@ import numpy as np
 from six.moves import range  # pylint: disable=redefined-builtin
 from six.moves import zip  # pylint: disable=redefined-builtin
 
+from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.util.tf_export import tf_export
+
+
 if sys.version_info < (3,):
   maketrans = string.maketrans
 else:
   maketrans = str.maketrans
 
 
+@tf_export('keras.preprocessing.text.text_to_word_sequence')
 def text_to_word_sequence(text,
                           filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
                           lower=True,
                           split=' '):
-  """Converts a text to a sequence of words (or tokens).
+  r"""Converts a text to a sequence of words (or tokens).
 
   Arguments:
       text: Input text (string).
-      filters: Sequence of characters to filter out.
-      lower: Whether to convert the input to lowercase.
-      split: Sentence split marker (string).
+      filters: list (or concatenation) of characters to filter out, such as
+          punctuation. Default: '!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
+          includes basic punctuation, tabs, and newlines.
+      lower: boolean, whether to convert the input to lowercase.
+      split: string, separator for word splitting.
 
   Returns:
       A list of words (or tokens).
@@ -53,44 +58,75 @@ def text_to_word_sequence(text,
   if lower:
     text = text.lower()
 
-  if sys.version_info < (3,) and isinstance(text, unicode):
-    translate_map = dict((ord(c), unicode(split)) for c in filters)
+  if sys.version_info < (3,):
+    if isinstance(text, unicode):
+      translate_map = dict((ord(c), unicode(split)) for c in filters)
+      text = text.translate(translate_map)
+    elif len(split) == 1:
+      translate_map = maketrans(filters, split * len(filters))
+      text = text.translate(translate_map)
+    else:
+      for c in filters:
+        text = text.replace(c, split)
   else:
-    translate_map = maketrans(filters, split * len(filters))
+    translate_dict = dict((c, split) for c in filters)
+    translate_map = maketrans(translate_dict)
+    text = text.translate(translate_map)
 
-  text = text.translate(translate_map)
   seq = text.split(split)
   return [i for i in seq if i]
 
 
+@tf_export('keras.preprocessing.text.one_hot')
 def one_hot(text,
             n,
             filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
             lower=True,
             split=' '):
+  r"""One-hot encodes a text into a list of word indexes of size n.
+
+  This is a wrapper to the `hashing_trick` function using `hash` as the
+  hashing function; unicity of word to index mapping non-guaranteed.
+
+  Arguments:
+      text: Input text (string).
+      n: int, size of vocabulary.
+      filters: list (or concatenation) of characters to filter out, such as
+          punctuation. Default: '!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
+          includes basic punctuation, tabs, and newlines.
+      lower: boolean, whether to set the text to lowercase.
+      split: string, separator for word splitting.
+
+  Returns:
+      List of integers in [1, n].
+      Each integer encodes a word (unicity non-guaranteed).
+  """
   return hashing_trick(
       text, n, hash_function=hash, filters=filters, lower=lower, split=split)
 
 
+@tf_export('keras.preprocessing.text.hashing_trick')
 def hashing_trick(text,
                   n,
                   hash_function=None,
                   filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
                   lower=True,
                   split=' '):
-  """Converts a text to a sequence of indexes in a fixed-size hashing space.
+  r"""Converts a text to a sequence of indexes in a fixed-size hashing space.
 
   Arguments:
       text: Input text (string).
       n: Dimension of the hashing space.
-      hash_function: if `None` uses python `hash` function, can be 'md5' or
+      hash_function: defaults to python `hash` function, can be 'md5' or
           any function that takes in input a string and returns a int.
-          Note that `hash` is not a stable hashing function, so
+          Note that 'hash' is not a stable hashing function, so
           it is not consistent across different runs, while 'md5'
           is a stable hashing function.
-      filters: Sequence of characters to filter out.
-      lower: Whether to convert the input to lowercase.
-      split: Sentence split marker (string).
+      filters: list (or concatenation) of characters to filter out, such as
+          punctuation. Default: '!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
+          includes basic punctuation, tabs, and newlines.
+      lower: boolean, whether to set the text to lowercase.
+      split: string, separator for word splitting.
 
   Returns:
       A list of integer word indices (unicity non-guaranteed).
@@ -99,6 +135,10 @@ def hashing_trick(text,
 
   Two or more words may be assigned to the same index, due to possible
   collisions by the hashing function.
+  The
+  probability
+  of a collision is in relation to the dimension of the hashing space and
+  the number of distinct objects.
   """
   if hash_function is None:
     hash_function = hash
@@ -109,6 +149,7 @@ def hashing_trick(text,
   return [(hash_function(w) % (n - 1) + 1) for w in seq]
 
 
+@tf_export('keras.preprocessing.text.Tokenizer')
 class Tokenizer(object):
   """Text tokenization utility class.
 
@@ -125,8 +166,10 @@ class Tokenizer(object):
           filtered from the texts. The default is all punctuation, plus
           tabs and line breaks, minus the `'` character.
       lower: boolean. Whether to convert the texts to lowercase.
-      split: character or string to use for token splitting.
+      split: string, separator for word splitting.
       char_level: if True, every character will be treated as a token.
+      oov_token: if given, it will be added to word_index and used to
+          replace out-of-vocabulary words during text_to_sequence calls
 
   By default, all punctuation is removed, turning the texts into
   space-separated sequences of words
@@ -141,7 +184,17 @@ class Tokenizer(object):
                filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
                lower=True,
                split=' ',
-               char_level=False):
+               char_level=False,
+               oov_token=None,
+               **kwargs):
+    # Legacy support
+    if 'nb_words' in kwargs:
+      logging.warning('The `nb_words` argument in `Tokenizer` '
+                      'has been renamed `num_words`.')
+      num_words = kwargs.pop('nb_words')
+    if kwargs:
+      raise TypeError('Unrecognized keyword arguments: ' + str(kwargs))
+
     self.word_counts = OrderedDict()
     self.word_docs = {}
     self.filters = filters
@@ -150,21 +203,28 @@ class Tokenizer(object):
     self.num_words = num_words
     self.document_count = 0
     self.char_level = char_level
+    self.oov_token = oov_token
+    self.index_docs = {}
 
   def fit_on_texts(self, texts):
     """Updates internal vocabulary based on a list of texts.
+
+    In the case where texts contains lists, we assume each entry of the lists
+    to be a token.
 
     Required before using `texts_to_sequences` or `texts_to_matrix`.
 
     Arguments:
         texts: can be a list of strings,
-            or a generator of strings (for memory-efficiency)
+            a generator of strings (for memory-efficiency),
+            or a list of list of strings.
     """
-    self.document_count = 0
     for text in texts:
       self.document_count += 1
-      seq = text if self.char_level else text_to_word_sequence(
-          text, self.filters, self.lower, self.split)
+      if self.char_level or isinstance(text, list):
+        seq = text
+      else:
+        seq = text_to_word_sequence(text, self.filters, self.lower, self.split)
       for w in seq:
         if w in self.word_counts:
           self.word_counts[w] += 1
@@ -181,9 +241,14 @@ class Tokenizer(object):
     sorted_voc = [wc[0] for wc in wcounts]
     # note that index 0 is reserved, never assigned to an existing word
     self.word_index = dict(
-        list(zip(sorted_voc, list(range(1, len(sorted_voc) + 1)))))
+        list(zip(sorted_voc, list(range(1,
+                                        len(sorted_voc) + 1)))))
 
-    self.index_docs = {}
+    if self.oov_token is not None:
+      i = self.word_index.get(self.oov_token)
+      if i is None:
+        self.word_index[self.oov_token] = len(self.word_index) + 1
+
     for w, c in list(self.word_docs.items()):
       self.index_docs[self.word_index[w]] = c
 
@@ -197,8 +262,7 @@ class Tokenizer(object):
         sequences: A list of sequence.
             A "sequence" is a list of integer word indices.
     """
-    self.document_count = len(sequences)
-    self.index_docs = {}
+    self.document_count += len(sequences)
     for seq in sequences:
       seq = set(seq)
       for i in seq:
@@ -225,7 +289,11 @@ class Tokenizer(object):
     return res
 
   def texts_to_sequences_generator(self, texts):
-    """Transforms each text in texts in a sequence of integers.
+    """Transforms each text in `texts` in a sequence of integers.
+
+    Each item in texts can also be a list, in which case we assume each item of
+    that list
+    to be a token.
 
     Only top "num_words" most frequent words will be taken into account.
     Only words known by the tokenizer will be taken into account.
@@ -238,8 +306,10 @@ class Tokenizer(object):
     """
     num_words = self.num_words
     for text in texts:
-      seq = text if self.char_level else text_to_word_sequence(
-          text, self.filters, self.lower, self.split)
+      if self.char_level or isinstance(text, list):
+        seq = text
+      else:
+        seq = text_to_word_sequence(text, self.filters, self.lower, self.split)
       vect = []
       for w in seq:
         i = self.word_index.get(w)
@@ -247,6 +317,10 @@ class Tokenizer(object):
           if num_words and i >= num_words:
             continue
           else:
+            vect.append(i)
+        elif self.oov_token is not None:
+          i = self.word_index.get(self.oov_token)
+          if i is not None:
             vect.append(i)
       yield vect
 
