@@ -396,7 +396,7 @@ class AudioProcessor(object):
     return len(self.data_index[mode])
 
   def get_data(self, how_many, offset, model_settings, background_frequency,
-               background_volume_range, time_shift, mode, sess):
+               background_volume_range, time_shift, mode, sess, mixup=0, alpha=2):
     """Gather samples from the data set, applying transformations as needed.
 
     When the mode is 'training', a random selection of samples will be returned,
@@ -485,7 +485,22 @@ class AudioProcessor(object):
       data[i - offset, :] = sess.run(self.mfcc_, feed_dict=input_dict).flatten()
       label_index = self.word_to_index[sample['label']]
       labels[i - offset] = label_index
-    return data, labels
+    if mixup == 0 or mode != 'training':
+      print("Data Type: {}, Shape {}".format(type(data), data.shape))
+      print("Labels Type: {}, Shape {}".format(type(labels), labels.shape))
+      return data, labels
+    elif mixup > 0:
+      weight = np.random.beta(alpha, alpha, how_many)
+      x_weight = weight.reshape(how_many, 1)
+      y_weight = weight.reshape(how_many, 1)
+      index = np.random.permutation(how_many)
+      x1, x2 = data, data[index]
+      x = x1 * x_weight + x2 * (1 - x_weight)
+      y1, y2 = labels, labels[index]
+      y = y1 * y_weight + y2 * (1 - y_weight)
+      print("Data Type: {}, Shape {}".format(type(x), x.shape))
+      print("Labels Type: {}, Shape {}".format(type(y), y.shape))
+      return x, y
 
   def get_unprocessed_data(self, how_many, model_settings, mode):
     """Retrieve sample data for the given partition, with no transformations.
