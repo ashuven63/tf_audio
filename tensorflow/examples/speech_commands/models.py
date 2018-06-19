@@ -104,6 +104,9 @@ def create_model(fingerprint_input, model_settings, model_architecture,
     return create_low_latency_conv_model(fingerprint_input, model_settings,
                                          is_training)
   elif model_architecture == 'low_latency_svdf':
+    if 'clip_stride_ms' in model_settings:
+        runtime_settings = {'clip_stride_ms': model_settings['clip_stride_ms']}
+        print("Using a clip stride of {}".format(model_settings['clip_stride_ms']))
     return create_low_latency_svdf_model(fingerprint_input, model_settings,
                                          is_training, runtime_settings)
   else:
@@ -457,7 +460,8 @@ def create_low_latency_svdf_model(fingerprint_input, model_settings,
 
   # Set number of units (i.e. nodes) and rank.
   rank = 2
-  num_units = 1280
+  num_units = model_settings['svdf_num_units']
+  print("Low latency svdf model. Using rank={}, num_units={}".format(rank, num_units))
   # Number of filters: pairs of feature and time filters.
   num_filters = rank * num_units
   # Create the runtime memory: [num_filters, batch, input_time_size]

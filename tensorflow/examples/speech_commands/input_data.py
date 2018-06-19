@@ -486,8 +486,6 @@ class AudioProcessor(object):
       label_index = self.word_to_index[sample['label']]
       labels[i - offset] = label_index
     if mixup == 0 or mode != 'training':
-      print("Data Type: {}, Shape {}".format(type(data), data.shape))
-      print("Labels Type: {}, Shape {}".format(type(labels), labels.shape))
       return data, labels
     elif mixup > 0:
       weight = np.random.beta(alpha, alpha, how_many)
@@ -498,8 +496,6 @@ class AudioProcessor(object):
       x = x1 * x_weight + x2 * (1 - x_weight)
       y1, y2 = labels, labels[index]
       y = y1 * y_weight + y2 * (1 - y_weight)
-      print("Data Type: {}, Shape {}".format(type(x), x.shape))
-      print("Labels Type: {}, Shape {}".format(type(y), y.shape))
       return x, y
 
   def get_unprocessed_data(self, how_many, model_settings, mode):

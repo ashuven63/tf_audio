@@ -150,8 +150,8 @@ def main(_):
   with tf.name_scope('train'), tf.control_dependencies(control_dependencies):
     learning_rate_input = tf.placeholder(
         tf.float32, [], name='learning_rate_input')
-    train_step = tf.train.GradientDescentOptimizer(
-        learning_rate_input).minimize(cross_entropy_mean)
+    train_step = tf.train.MomentumOptimizer(
+        learning_rate_input, 0.9).minimize(cross_entropy_mean)
   predicted_indices = tf.argmax(logits, 1)
   correct_prediction = tf.equal(predicted_indices, ground_truth_input)
   confusion_matrix = tf.confusion_matrix(
@@ -423,6 +423,16 @@ if __name__ == '__main__':
       type=bool,
       default=False,
       help='Whether to check for invalid numbers during processing')
+  parser.add_argument(
+      '--svdf_num_units',
+      type=int,
+      default=640,
+      help='Num of units to be used in the hidden layer of svdf topology')
+  parser.add_argument(
+      '--clip_stride_ms',
+      type=int,
+      default=125,
+      help='Clip stride to be used in svdf topology')
 
   FLAGS, unparsed = parser.parse_known_args()
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
