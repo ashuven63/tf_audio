@@ -26,7 +26,7 @@ import tensorflow as tf
 
 def prepare_model_settings(label_count, sample_rate, clip_duration_ms,
                            window_size_ms, window_stride_ms,
-                           dct_coefficient_count, svdf_num_units, clip_stride_ms):
+                           dct_coefficient_count, svdf_num_units=None):
   """Calculates common settings needed for all models.
 
   Args:
@@ -58,8 +58,7 @@ def prepare_model_settings(label_count, sample_rate, clip_duration_ms,
       'fingerprint_size': fingerprint_size,
       'label_count': label_count,
       'sample_rate': sample_rate,
-      'svdf_num_units': svdf_num_units,
-      'clip_stride_ms': clip_stride_ms
+      'svdf_num_units': svdf_num_units
   }
 
 

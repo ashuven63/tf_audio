@@ -98,7 +98,7 @@ def main(_):
   model_settings = models.prepare_model_settings(
       len(input_data.prepare_words_list(FLAGS.wanted_words.split(','))),
       FLAGS.sample_rate, FLAGS.clip_duration_ms, FLAGS.window_size_ms,
-      FLAGS.window_stride_ms, FLAGS.dct_coefficient_count, FLAGS.svdf_num_units, FLAGS.clip_stride_ms)
+      FLAGS.window_stride_ms, FLAGS.dct_coefficient_count, FLAGS.svdf_num_units)
   audio_processor = input_data.AudioProcessor(
       FLAGS.data_url, FLAGS.data_dir, FLAGS.silence_percentage,
       FLAGS.unknown_percentage,
@@ -428,11 +428,6 @@ if __name__ == '__main__':
       type=int,
       default=640,
       help='Num of units to be used in the hidden layer of svdf topology')
-  parser.add_argument(
-      '--clip_stride_ms',
-      type=int,
-      default=125,
-      help='Clip stride to be used in svdf topology')
 
   FLAGS, unparsed = parser.parse_known_args()
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
